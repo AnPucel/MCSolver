@@ -1,8 +1,8 @@
 ;; TODOS:
-;;   - Figure out how to deal w/ duplicate states
-;;   - Fix while loop (must sort nodes before choosing node to pop)
 ;;   - Function to back track and get solution from hash adjustable
 ;;   - Print and format solution
+;;   - Refactor
+;;   - Documentation
 
 ;; Struct for current state
 (defstruct state
@@ -26,7 +26,7 @@
 ;; Hashtable for visited states
 (setf visited (make-hash-table))
 
-;; Vector to store unique states
+;; Array to store unique states
 (setf unique-states(make-array 0 :fill-pointer 0 :adjustable t))
 
 ;; Total missionaries
@@ -55,23 +55,25 @@
    (setf (aref end_bank 0) 0)
    (setf (aref end_bank 1) 0)
 
-   (setf start_node(make-node :start_bank start_bank :end_bank end_bank :boat_pos 0 :id (incf counter) :parent_id 0 :heuristic 30 :depth 1))
+   (setf state (make-state :start_bank start_bank :end_bank end_bank :boat_pos 0))
+   (setf start_node(make-node :state state :id (incf counter) :parent_id 0 :heuristic 30 :depth 1))
 
+   (vector-push-extend state unique-states)
    (vector-push-extend start_node state-vector)
 )
 
 ;; Desc: Finds all valid moves for the current state node and creates new nodes
 ;; Parameters: Takes a current state_node (struct)
-(defun find_moves(curr_state)
-   (setf boat_pos (node-boat_pos curr_state))
-   (if (= 0 boat_pos)
+(defun find_moves(curr_node)
+
+   (if (= 0 (state-boat_pos (node-state curr_node)))
       (progn
-         (setf start_bank(node-start_bank curr_state))
-         (setf total (+(aref start_bank 0)(aref start_bank 1)))
+         (setf s_bank(state-start_bank(node-state curr_node)))
+         (setf total (+(aref s_bank 0)(aref s_bank 1)))
       )
       (progn
-         (setf end_bank (node-end_bank curr_state))
-         (setf total (+(aref end_bank 0)(aref end_bank 1)))
+         (setf e_bank(state-end_bank(node-state curr_node)))
+         (setf total (+(aref e_bank 0)(aref e_bank 1)))
       )
    )
 
@@ -83,7 +85,7 @@
    (loop for j from 1 to x do
       (loop for c from 0 to j do
          (if (or(<= c (/ j 2))(= c j))
-           (transition curr_state (- j c) c)
+           (transition curr_node (- j c) c)
          )
       )
    )
@@ -94,34 +96,34 @@
 (defun transition(curr_node m c)
 
    ; Calculate new values on bank start and end bank
-   (setf boat_pos(node-boat_pos curr_node))
+   (setf boat_pos(state-boat_pos (node-state curr_node)))
 
-   (setf curr_start_bank (node-start_bank curr_node))
-   (setf curr_end_bank (node-end_bank curr_node))
+   (setf curr_s_bank(state-start_bank(node-state curr_node)))
+   (setf curr_e_bank(state-end_bank(node-state curr_node)))
 
    (setf new_start_bank (make-array '(2)))
    (setf new_end_bank (make-array '(2)))
 
    (if (= 0 boat_pos)
       (progn
-         (setf (aref new_start_bank 0) (- (aref curr_start_bank 0) m))
-         (setf (aref new_start_bank 1) (- (aref curr_start_bank 1) c))
+         (setf (aref new_start_bank 0) (- (aref curr_s_bank 0) m))
+         (setf (aref new_start_bank 1) (- (aref curr_s_bank 1) c))
 
-         (setf (aref new_end_bank 0) (+ (aref curr_end_bank 0) m))
-         (setf (aref new_end_bank 1) (+ (aref curr_end_bank 1) c))
+         (setf (aref new_end_bank 0) (+ (aref curr_e_bank 0) m))
+         (setf (aref new_end_bank 1) (+ (aref curr_e_bank 1) c))
       )
       (progn
-         (setf (aref new_start_bank 0) (+ (aref curr_start_bank 0) m))
-         (setf (aref new_start_bank 1) (+ (aref curr_start_bank 1) c))
+         (setf (aref new_start_bank 0) (+ (aref curr_s_bank 0) m))
+         (setf (aref new_start_bank 1) (+ (aref curr_s_bank 1) c))
 
-         (setf (aref new_end_bank 0) (- (aref curr_end_bank 0) m))
-         (setf (aref new_end_bank 1) (- (aref curr_end_bank 1) c))
+         (setf (aref new_end_bank 0) (- (aref curr_e_bank 0) m))
+         (setf (aref new_end_bank 1) (- (aref curr_e_bank 1) c))
       )
    )
 
    ; Check validity of new node
    ;; TODO: Update to call is unique here
-   (if (isValid new_start_bank new_end_bank)
+   (if (and (isValid new_start_bank new_end_bank)(isUnique new_start_bank new_end_bank boat_pos))
       (create_node new_start_bank new_end_bank boat_pos (node-id curr_node) curr_node)
    )
 
@@ -144,9 +146,29 @@
 
 ;; Checks whether node has been expanded before
 ;; Pushes unique states on to array
-(defun isUnique(s_bank end_bank boat_pos)
-   (setf new_state(make-state :start_bank s_bank :end_bank e_bank :boat_pos 0))
+(defun isUnique(s_bank e_bank boat_pos)
+  (if (= 0 boat_pos)
+    (setf boat_pos 1)
+    (setf boat_pos 0)
+  )
+   ;;If in unique states array don't expand
+   (setf l (length unique-states))
+   (loop for i from 0 to (- l 1) do
+      (setf curr_state (aref unique-states i))
+      (if (and (= (aref (state-start_bank curr_state) 0)(aref s_bank 0))
+          (= (aref (state-start_bank curr_state) 1)(aref s_bank 1))
+          (= (aref (state-end_bank curr_state) 0)(aref e_bank 0))
+          (= (aref (state-end_bank curr_state) 1)(aref e_bank 1))
+          (= (state-boat_pos curr_state) boat_pos)
+          )
+          (return-from isUnique nil
+        )
+      )
+    )
 
+   (setf new_state (make-state :start_bank s_bank :end_bank e_bank :boat_pos boat_pos))
+   (vector-push-extend new_state unique-states)
+   (return-from isUnique 't)
 )
 
 ;; Desc: Initialize new node
@@ -159,21 +181,11 @@
    (setf h (+ (aref s_bank 0)(aref s_bank 1)))
    (setf h (+ h boat_pos))
    (setf h (* h (+ 1(node-depth curr_node))))
-   (setf new_node(make-node :start_bank s_bank :end_bank e_bank :boat_pos boat_pos :id (incf counter) :parent_id id :heuristic h :depth (+ 1(node-depth curr_node))))
+
+   (setf new_state (make-state :start_bank s_bank :end_bank e_bank :boat_pos boat_pos))
+   (setf new_node(make-node :state new_state :id (incf counter) :parent_id id :heuristic h :depth (+ 1(node-depth curr_node))))
 
    (vector-push-extend new_node state-vector)
-)
-
-;; Desc: Checks if the next node to be expanded is at the goal state
-;; TODO: Something here when goal state is reached
-(defun check_goal_state(curr_node)
-  (setf node_end(node-end_bank curr_node))
-  (setf m_end (aref node_end 0))
-  (setf c_end (aref node_end 1))
-
-   (if (and(= m_end tot_m)(= c_end tot_c))
-      (print here)
-   )
 )
 
 ;; Desc: function to sort state vector based off heuristic
@@ -200,38 +212,60 @@
     )
 )
 
+(defun isGoal(node)
+   (setf state (node-state node))
+   (if (and (= (aref (state-start_bank state) 0) 0)
+    (= (aref (state-start_bank state) 1) 0)
+    (= (aref (state-end_bank state) 0)tot_m)
+    (= (aref (state-end_bank state) 1)tot_c)
+    (= (state-boat_pos state) 1)
+    )
+      (return-from isGoal 't)
+      (return-from isGoal nil)
+    )
+)
 
-;; TODO: Make a solution finder
-;; Desc: Backtracks and stores the final solution path
+(defun getSolution(goal_node)
+  (setf solution-vector (make-array 0 :fill-pointer 0 :adjustable t))
+  (setf parent_id (node-parent_id goal_node))
+  (vector-push-extend goal_node solution-vector)
+
+  (loop while(not (= parent_id 1)) do
+    (setf next_node(gethash parent_id visited))
+    (setf parent_id (node-parent_id next_node))
+    (vector-push-extend next_node solution-vector)
+  )
+  (formatSolution solution-vector)
+)
+
+(defun formatSolution(solution-vector)
+
+  (setf l (length solution-vector))
+  (loop for i from l downto 0 do
+    (print (aref solution-vector i))
+    (format t"~%")
+  )
+)
 
 ;; Main function that initializes and calls the solver
 (defun main()
    (print "Missionaries vs. Cannibals")
-
    ;; Initialize first node
    (init_node tot_m tot_c boat_size)
+   (setf curr_node (vector-pop state-vector))
 
-   (setf y 0)
-   (loop while(< y 100) do
+   (loop while(not(isGoal curr_node)) do
+
+      (find_moves curr_node)
+
+      (setf (gethash (node-id curr_node) visited)curr_node)
 
       (if (< 0 (length state-vector))
-        (progn
-          (print "Sorting nodes...")
           (sort_nodes state-vector)
-        )
       )
 
-      (setf curr_state (vector-pop state-vector))
-      (print "Expand node")
-      (print curr_state)
-
-      (find_moves curr_state)
-
-      (setf (gethash (node-id curr_state) visited)curr_state)
-
-      ;;If goal state then stop and get solution
-      ;;Expand other nodes
-      (incf y)
+      (setf curr_node (vector-pop state-vector))
    )
 
+   (getSolution curr_node)
 )
