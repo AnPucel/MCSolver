@@ -45,8 +45,6 @@
 ;; Initialize node
 ;; Takes in total number of missionaries, total number of cannibals, and boat size
 (defun init_node(tot_m tot_c boat_size)
-   (print "Initializing node...")
-
    (setf start_bank (make-array '(2)))
    (setf (aref start_bank 0) tot_m)
    (setf (aref start_bank 1) tot_c)
@@ -241,9 +239,11 @@
 (defun formatSolution(solution-vector)
 
   (setf l (length solution-vector))
-  (loop for i from l downto 0 do
-    (print (aref solution-vector i))
-    (format t"~%")
+
+  (loop for i from (- l 1) downto 0 do
+    (setf something (aref solution-vector i))
+    (setf else (node-state something))
+    (format t "~% ~S ~S               ~S ~S" (aref (state-start_bank else) 0)(aref (state-start_bank else) 1)(aref (state-end_bank else) 0)(aref (state-end_bank else) 1))
   )
 )
 
